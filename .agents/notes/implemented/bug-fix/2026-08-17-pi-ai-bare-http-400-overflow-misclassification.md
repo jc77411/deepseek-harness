@@ -28,3 +28,8 @@ When a non-Cerebras provider (e.g. SiliconFlow) returned `400 status code (no bo
 - Cerebras overflow detection is unchanged: the provider guard keeps `CONTEXT_WINDOW_EXCEEDED` for that gateway.
 - Descriptive overflow errors (e.g. `exceeds the context window`) still map to `CONTEXT_WINDOW_EXCEEDED` through `isContextWindowExceededError`, independent of this guard.
 - The true reason for an empty 400 (quota, auth, guard) is still not recoverable from the response body; it is reported as `INVALID_REQUEST`, which is accurate to the extent the wire can reveal.
+
+## Testing
+
+- `packages/llm/llm-pi-ai/tests/adapter.spec.ts` proves the wire message maps: a bare `400` and bare `413` (no body) from a non-Cerebras provider both map to `INVALID_REQUEST`, not `CONTEXT_WINDOW_EXCEEDED`.
+- `packages/compaction/compaction-basic/tests/compaction-loop-repro.spec.ts` proves the assembled loop does not enter overflow recovery for an in-band `INVALID_REQUEST` finish: exactly one conversation request, zero summary requests, no `compaction/*` events, no retry step, and the final `turn/end` preserves `INVALID_REQUEST` with the original text. The two tests meet at the public `finish` reason seam, so the assembled test needs no real provider or network.

@@ -28,3 +28,8 @@ English | [中文](2026-08-17-pi-ai-bare-http-400-overflow-misclassification.md)
 - Cerebras 的溢出检测不变：提供方守卫为其网关保留了 `CONTEXT_WINDOW_EXCEEDED`。
 - 描述性溢出错误（如 `exceeds the context window`）仍经 `isContextWindowExceededError` 映射为 `CONTEXT_WINDOW_EXCEEDED`，与此守卫无关。
 - 空 400 的真实原因（配额、鉴权、守卫）仍无法从响应 body 恢复；它被报告为 `INVALID_REQUEST`，这在线上可揭示的范围内是准确的。
+
+## Testing
+
+- `packages/llm/llm-pi-ai/tests/adapter.spec.ts` 证明线上消息映射：非 Cerebras 提供方的裸 `400` 和裸 `413`（无 body）都映射为 `INVALID_REQUEST`，而非 `CONTEXT_WINDOW_EXCEEDED`。
+- `packages/compaction/compaction-basic/tests/compaction-loop-repro.spec.ts` 证明组装后的 loop 不会为 in-band `INVALID_REQUEST` finish 进入溢出恢复：恰好一次对话请求、零次摘要请求、无 `compaction/*` 事件、无重试步骤，且最终 `turn/end` 保留 `INVALID_REQUEST` 与原始文本。两个测试在公开的 `finish` reason seam 处汇合，因此组装测试不需要真实提供方或网络。

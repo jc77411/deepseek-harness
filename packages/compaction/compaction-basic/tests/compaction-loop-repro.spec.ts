@@ -139,6 +139,46 @@ class OverflowRecoveryAdapter extends LlmAdapter {
   }
 }
 
+/** Every conversation request finishes in-band with INVALID_REQUEST, never overflow. */
+class InvalidRequestAdapter extends LlmAdapter {
+  readonly conversationRequests: GenerateOptions[] = []
+  readonly summaryRequests: GenerateOptions[] = []
+
+  override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+    return Promise.resolve({
+      provider,
+      id: model,
+      name: model,
+      context: { contextWindow: 256 },
+    })
+  }
+
+  override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    // The cache-reusing summarizer marks its call only by the compaction
+    // instruction in the trailing user message.
+    const trailing = options.messages.at(-1)?.content
+      .map(block => (block.type === 'text' ? block.text : ''))
+      .join('') ?? ''
+    if (trailing.includes('acting as a compaction engine')) {
+      this.summaryRequests.push(options)
+      yield { type: 'finish', reason: { kind: 'error', failure: { message: 'summary must not run', code: 'SERVER' } } }
+      return
+    }
+
+    this.conversationRequests.push(options)
+    yield {
+      type: 'finish',
+      reason: {
+        kind: 'error',
+        failure: {
+          message: '400 status code (no body)',
+          code: 'INVALID_REQUEST',
+        },
+      },
+    }
+  }
+}
+
 async function mountInvariants(ctx: Context): Promise<void> {
   await ctx.plugin(InvariantRegistry)
   await ctx.plugin(SessionInvariant)
@@ -420,6 +460,49 @@ describe('context-overflow recovery across the real loop and compaction-basic', 
       expect(agent.session.events.at(-1)).toMatchObject({
         type: 'turn/end',
         data: { reason: { kind: 'completed' } },
+      })
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('does not enter overflow recovery for an in-band INVALID_REQUEST finish', async () => {
+    const ctx = new Context()
+    const adapter = new InvalidRequestAdapter()
+    await mountAgentLoopTestDependencies(ctx)
+    await mountInvariants(ctx)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(TokenMeter)
+    ctx.llm.registerAdapter(['mock'], adapter)
+    await ctx.plugin(BasicCompactionEngine, {
+      thresholdRatio: 1,
+      retainTokens: 100,
+      maxTokens: 64,
+      compactionRetries: 0,
+      maxOverflowRetries: 1,
+    })
+
+    try {
+      const { agent } = await ctx.agentLoop.createAgent(ctx, {
+        sessionId: SessionId('invalid-request-no-recovery'),
+        seed: overflowHistorySeed(),
+        agentOptions: { provider: 'mock', model: 'mock' },
+      })
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'continue from history' }], source: { kind: 'user' } }))
+      await agent.whenIdle()
+
+      expect(adapter.conversationRequests).toHaveLength(1)
+      expect(adapter.summaryRequests).toHaveLength(0)
+      const compactionEvents = agent.session.events.filter(event =>
+        event.type === 'compaction/start'
+        || event.type === 'compaction/summary'
+        || event.type === 'compaction/end',
+      )
+      expect(compactionEvents).toHaveLength(0)
+      expect(agent.session.events.filter(event => event.type === 'llm/retry')).toHaveLength(0)
+      expect(agent.session.events.at(-1)).toMatchObject({
+        type: 'turn/end',
+        data: { reason: { kind: 'error', error: { message: '400 status code (no body)', code: 'INVALID_REQUEST' } } },
       })
     } finally {
       await ctx.fiber.dispose()
