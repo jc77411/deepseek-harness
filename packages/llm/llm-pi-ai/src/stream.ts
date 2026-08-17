@@ -71,7 +71,16 @@ function classifyPiAiError(message: string): string {
  *   `EMPTY_RESPONSE` error.
  */
 export function mapStopReason(message: AssistantMessage, contextWindow?: number): FinishReason {
-  const piAiOverflow = isContextOverflow(message, contextWindow)
+  const errorText = message.errorMessage ?? ''
+  // pi-ai matches a bare `400/413 (no body)` rejection as context overflow only
+  // for Cerebras, whose gateway reports overflow as an empty HTTP 400/413.
+  // Other OpenAI-compatible providers (e.g. SiliconFlow) return the same empty
+  // rejection for unrelated reasons (quota, auth, request guard); labeling it
+  // CONTEXT_WINDOW_EXCEEDED there drives a compaction retry that re-sends the
+  // failing request instead of surfacing the real error.
+  const bareHttpNoBody = /^4(?:00|13)\s*(?:status code)?\s*\(no body\)/i.test(errorText)
+  const skipPiAiOverflow = bareHttpNoBody && message.provider !== 'cerebras'
+  const piAiOverflow = !skipPiAiOverflow && isContextOverflow(message, contextWindow)
   const harnessOverflow = message.stopReason === 'error'
     && message.errorMessage !== undefined
     && isContextWindowExceededError(message.errorMessage)

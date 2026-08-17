@@ -309,6 +309,18 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.paths).toEqual(['/chat/completions'])
   })
 
+  it('does not label a bare 400 (no body) as context overflow for a non-Cerebras provider', async () => {
+    // OpenAI-compatible gateways (e.g. SiliconFlow) return an empty 400 for
+    // unrelated rejections (quota, auth, request guard). pi-ai's overflow
+    // matcher treats that shape as overflow only for Cerebras, so it must not
+    // be promoted to CONTEXT_WINDOW_EXCEEDED here.
+    const server = await mockServer([{ status: 400, body: '' }])
+    const ctx = await harness(server.url)
+    const result = await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
+    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST' } })
+    expect(server.paths).toEqual(['/chat/completions'])
+  })
+
   it('uses the resolved catalog context window for usage-based overflow detection', async () => {
     const model = getBuiltinModels('deepseek').find(candidate => candidate.id === 'deepseek-v4-flash')
     if (model === undefined) throw new Error('deepseek-v4-flash missing from pi-ai test catalog')
