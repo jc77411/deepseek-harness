@@ -309,15 +309,19 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.paths).toEqual(['/chat/completions'])
   })
 
-  it('does not label a bare 400 (no body) as context overflow for a non-Cerebras provider', async () => {
-    // OpenAI-compatible gateways (e.g. SiliconFlow) return an empty 400 for
+  it.each([
+    [400, 'INVALID_REQUEST'],
+    [413, 'INVALID_REQUEST'],
+  ] as const)('does not label a bare %s (no body) as context overflow for a non-Cerebras provider', async (status, code) => {
+    // OpenAI-compatible gateways (e.g. SiliconFlow) return an empty 400/413 for
     // unrelated rejections (quota, auth, request guard). pi-ai's overflow
     // matcher treats that shape as overflow only for Cerebras, so it must not
-    // be promoted to CONTEXT_WINDOW_EXCEEDED here.
-    const server = await mockServer([{ status: 400, body: '' }])
+    // be promoted to CONTEXT_WINDOW_EXCEEDED here; a bare 413 must fall through
+    // to INVALID_REQUEST rather than PI_AI_ERROR.
+    const server = await mockServer([{ status, body: '' }])
     const ctx = await harness(server.url)
     const result = await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
-    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST' } })
+    expect(result.finish).toMatchObject({ kind: 'error', failure: { code } })
     expect(server.paths).toEqual(['/chat/completions'])
   })
 

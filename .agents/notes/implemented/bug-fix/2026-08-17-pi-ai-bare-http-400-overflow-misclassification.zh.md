@@ -12,7 +12,7 @@ English | [中文](2026-08-17-pi-ai-bare-http-400-overflow-misclassification.md)
 
 ## Decision
 
-当错误文本是裸 `400/413 (no body)` 且模型的 `provider` 不是 `cerebras` 时，`mapStopReason` 跳过 pi-ai 的 `isContextOverflow` 判定。错误随后落入既有的 `classifyPiAiError` 路径，把 `400` 归类为 `INVALID_REQUEST` 而非 `CONTEXT_WINDOW_EXCEEDED`。Cerebras 保留溢出升级，而描述性溢出文本（由 `harnessOverflow` 分支经 `isContextWindowExceededError` 匹配）不受影响。
+当错误文本是裸 `400/413 (no body)` 且模型的 `provider` 不是 `cerebras` 时，`mapStopReason` 跳过 pi-ai 的 `isContextOverflow` 判定。错误随后落入既有的 `classifyPiAiError` 路径，其 HTTP 状态匹配器由 `\b400\b` 拓宽为 `\b4(?:00|13)\b`，使裸 `400` 和裸 `413` 都归类为 `INVALID_REQUEST`（此前裸 `413` 会落入 `PI_AI_ERROR`）。Cerebras 保留溢出升级，而描述性溢出文本（由 `harnessOverflow` 分支经 `isContextWindowExceededError` 匹配）不受影响。
 
 ## Alternatives considered
 

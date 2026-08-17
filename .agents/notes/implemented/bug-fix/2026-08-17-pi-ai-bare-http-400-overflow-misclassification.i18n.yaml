@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-17-pi-ai-bare-http-400-overflow-misclassification.md
-2026-08-17-pi-ai-bare-http-400-overflow-misclassification.md: d3895e3df72f564cbd50a7f25c6ca9c8bfe138f7
-2026-08-17-pi-ai-bare-http-400-overflow-misclassification.zh.md: a7741e93771853edb7ebc778651fb42b37e74a6b
+2026-08-17-pi-ai-bare-http-400-overflow-misclassification.md: 05c4f494bc3371b458f2f07a5623b8d2d69e72d1
+2026-08-17-pi-ai-bare-http-400-overflow-misclassification.zh.md: 067319fd3d1f76ecb555d4930a1dd76bf33af6a3

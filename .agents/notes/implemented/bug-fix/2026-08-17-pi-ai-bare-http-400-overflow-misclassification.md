@@ -12,7 +12,7 @@ When a non-Cerebras provider (e.g. SiliconFlow) returned `400 status code (no bo
 
 ## Decision
 
-`mapStopReason` skips pi-ai's `isContextOverflow` verdict when the error text is a bare `400/413 (no body)` and the model's `provider` is not `cerebras`. The error then falls through to the existing `classifyPiAiError` path, which routes the `400` to `INVALID_REQUEST` instead of `CONTEXT_WINDOW_EXCEEDED`. Cerebras keeps the overflow promotion, and descriptive overflow text (matched by `isContextWindowExceededError` via the separate `harnessOverflow` arm) is unaffected.
+`mapStopReason` skips pi-ai's `isContextOverflow` verdict when the error text is a bare `400/413 (no body)` and the model's `provider` is not `cerebras`. The error then falls through to the existing `classifyPiAiError` path, whose HTTP-status matcher was widened from `\b400\b` to `\b4(?:00|13)\b` so both a bare `400` and a bare `413` route to `INVALID_REQUEST` (previously a bare `413` fell through to `PI_AI_ERROR`). Cerebras keeps the overflow promotion, and descriptive overflow text (matched by `isContextWindowExceededError` via the separate `harnessOverflow` arm) is unaffected.
 
 ## Alternatives considered
 
